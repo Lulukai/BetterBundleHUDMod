@@ -40,6 +40,8 @@ Displayed totals may exceed normal stack limits; withdrawals obey normal invento
 
 Original author: **zeroowo24**. Continuation maintained by **Lulukai**.
 
+This continuation was developed with assistance from GPT.
+
 The original repository's CC0-1.0 license is retained. Minecraft textures are referenced from the installed game and are not redistributed. This is an unofficial project, not affiliated with Mojang or Microsoft.
 
 ## Build from source
