@@ -1,48 +1,46 @@
 # BetterBundleHUD Continued
 
-A client-side Fabric mod for **Minecraft Java 26.3** that displays the contents of your bundles beside the inventory. An independent continuation of [zeroowo24's BetterBundleHUD](https://github.com/zeroowo24/BetterBundleHUDMod), preserving the upstream source history and CC0 license.
+A client-side **Fabric mod for Minecraft Java 26.3** that displays the contents of your bundles beside the inventory.
+
+This is an independent continuation of [BetterBundleHUD by zeroowo24](https://modrinth.com/project/3TR1DyhT), with the [original source history](https://github.com/zeroowo24/BetterBundleHUDMod) and CC0-1.0 license preserved.
 
 ## Features
 
-- One inventory panel for the contents of every bundle in your main inventory and hotbar.
-- Matching items from different bundles combined into one HUD entry with their total count.
-- Items with different names, enchantments, damage, or other components kept separate.
-- Eight English category tabs, including **Decorations**.
-- All 152 item IDs added between Minecraft 26.1 and 26.3 categorized, including every color variant. See the [complete category audit](docs/item-categories-26.3.md).
-- Vanilla inventory frames, slots, buttons, and scrollbars, using Minecraft assets directly for resource-pack compatibility.
-- A simple **All Items** heading; no search field or mouse-action instructions in item tooltips.
-- Client-side operation in single-player and multiplayer, with no server installation required.
+- See items from all bundles in your main inventory and hotbar in one panel.
+- Combine identical items from different bundles into a single entry with a total count.
+- Added category assignments for all 152 item IDs added between Java 26.1 and 26.3, including every color variant.
+- Vanilla-style inventory frame, slots, buttons, and scrollbar that reference Minecraft assets directly for resource-pack compatibility.
+- Works client-side in single-player and multiplayer. No server installation is required.
 
-## Install
+## Requirements
 
-You need:
+- Minecraft Java Edition **26.3**
+- Fabric Loader **0.20.1 or newer**
+- **Fabric API** for Minecraft 26.3 (0.165.0+26.3 or a compatible later build)
+- Java **25 or newer**
 
-| Requirement | Version |
-| --- | --- |
-| Minecraft Java Edition | 26.3 |
-| Java | 25 or newer |
-| Fabric Loader | 0.20.1 or newer |
-| Fabric API | 0.165.0+26.3 or a compatible later build for 26.3 |
+Install the mod JAR and Fabric API in your Minecraft instance's `mods` folder, then restart the game. Install only one version of BetterBundleHUD: this continuation and the original share the mod ID `better-bundle`.
 
-Download the compiled mod from [Releases](https://github.com/Lulukai/BetterBundleHUDMod/releases), or build it from source. Put `better-bundle-1.5.1+26.3.jar` and Fabric API in your Minecraft instance's `mods` folder, then restart the game. Install only one version of BetterBundleHUD at a time: the original and this fork use the same mod ID, `better-bundle`.
+## Using the panel
 
-If no release is listed yet, the [Build workflow](https://github.com/Lulukai/BetterBundleHUDMod/actions/workflows/build.yml) provides downloadable JAR artifacts after a successful run (GitHub sign-in required).
+Open the inventory and close the vanilla recipe book using its green book button. The recipe book and bundle panel share the space beside the inventory. Opening the recipe book temporarily hides the bundle panel. The bundle icon at the right edge of the inventory toggles the panel independently.
 
-## Use
+Select a category tab to filter items, and scroll over the item grid to see more entries.
 
-Open your inventory and close the vanilla recipe book with its green book button. The bundle panel and recipe book share the space beside the inventory, so opening the recipe book temporarily hides the bundle panel. The bundle icon at the right edge of the inventory toggles the panel independently.
-
-Select a category tab to filter the list, and scroll over the item grid to view more entries.
-
-The following controls were confirmed by the tester in both single-player and multiplayer:
-
-| Action on a HUD item | Result |
+| Action on a HUD item | Result confirmed in-game |
 | --- | --- |
 | Shift-click | Collect all matching items that fit in available storage |
 | Left-click | Collect one bundle entry |
-| Right-click | No action |
 
-Totals can exceed Minecraft's normal stack size; actual withdrawals still obey normal inventory and stack limits. Items that do not fit stay in their source bundles. Avoid closing or changing screens while a transfer is running; Escape cancels the remaining work and leaves already collected items in inventory.
+Displayed totals may exceed normal stack limits; withdrawals obey normal inventory and stack limits. Items that do not fit remain in their bundles. Escape cancels the remaining transfer work and leaves already collected items in inventory.
+
+[Source code and README](https://github.com/Lulukai/BetterBundleHUDMod) · [Report a bug](https://github.com/Lulukai/BetterBundleHUDMod/issues) · [Full category list](https://github.com/Lulukai/BetterBundleHUDMod/blob/main/docs/item-categories-26.3.md)
+
+## Attribution
+
+Original author: **zeroowo24**. Continuation maintained by **Lulukai**.
+
+The original repository's CC0-1.0 license is retained. Minecraft textures are referenced from the installed game and are not redistributed. This is an unofficial project, not affiliated with Mojang or Microsoft.
 
 ## Build from source
 
@@ -61,23 +59,3 @@ bash ./gradlew build
 ```
 
 The installable JAR is written to `build/libs/`. The `-sources.jar` contains source code for developers. GitHub Actions builds the project and uploads both artifacts on pushes and pull requests.
-
-## Validation
-
-The Gradle build includes access-widener validation and 22 automated tests covering category coverage, shared UI layout, item-component grouping, and simulated withdrawal behavior. The withdrawal tests cover full inventories, partial stacks, changing bundle indexes, cancellation, and rejected transfers.
-
-The tester confirmed grouped contents and the controls above in both single-player and multiplayer on Minecraft 26.3 with version 1.5.0. Version 1.5.1 removes the tooltip action hints and updates documentation; it does not change the interaction code. Automated tests supplement that manual test and do not simulate a live server connection.
-
-Please report bugs through [Issues](https://github.com/Lulukai/BetterBundleHUDMod/issues) with your Minecraft version, mod version, relevant log excerpt, and reproduction steps.
-
-## Attribution and license
-
-Original author: **zeroowo24**. Continuation maintained by [Lulukai](https://github.com/Lulukai).
-
-- [Original source](https://github.com/zeroowo24/BetterBundleHUDMod)
-- [Original Modrinth project](https://modrinth.com/project/3TR1DyhT)
-- Upstream base: commit `651220f`, version 1.2.0
-
-The original repository's [LICENSE](LICENSE) is **CC0-1.0** and is retained unchanged. The original mod metadata and Modrinth listing said MIT; this fork follows the license file distributed with the source.
-
-Minecraft textures are referenced from the installed game and are not redistributed by this project. This is an unofficial project, not affiliated with Mojang or Microsoft.
