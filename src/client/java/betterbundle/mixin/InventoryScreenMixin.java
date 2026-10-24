@@ -1,7 +1,9 @@
 package betterbundle.mixin;
 
 import betterbundle.gui.BundlePanelRenderer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.network.chat.Component;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -46,9 +48,17 @@ public abstract class InventoryScreenMixin {
 
     private static void renderToggleButton(GuiGraphicsExtractor graphics, int x, int y, int mouseX, int mouseY) {
         boolean hovered = mouseX >= x && mouseX < x + 20 && mouseY >= y && mouseY < y + 20;
-        if (hovered) graphics.fill(x, y, x + 20, y + 20, 0x40FFFFFF);
-        if (BundlePanelRenderer.visible) graphics.fill(x + 2, y + 17, x + 18, y + 18, 0xFF80B0FF);
+        if (BundlePanelRenderer.visible) {
+            BundlePanelRenderer.drawFrame(graphics, x, y, 20, 20);
+        } else {
+            BundlePanelRenderer.sprite(graphics, hovered ? "widget/button_highlighted" : "widget/button", x, y, 20, 20);
+        }
+        if (hovered) {
+            String key = BundlePanelRenderer.isRecipeBookOpen() ? "gui.better-bundle.recipe_book"
+                    : BundlePanelRenderer.visible ? "gui.better-bundle.hide" : "gui.better-bundle.show";
+            graphics.setTooltipForNextFrame(Minecraft.getInstance().font, Component.translatable(key), mouseX, mouseY);
+        }
         ItemStack icon = new ItemStack(Items.BUNDLE);
-        graphics.item(icon, x + 1, y + 2);
+        graphics.item(icon, x + 2, y + 2);
     }
 }

@@ -1,44 +1,35 @@
 package betterbundle.gui;
 
-import net.sourceforge.pinyin4j.PinyinHelper;
-import net.sourceforge.pinyin4j.format.HanyuPinyinOutputFormat;
-import net.sourceforge.pinyin4j.format.HanyuPinyinToneType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractRecipeBookScreen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.BundleContents;
 import org.apache.commons.lang3.math.Fraction;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 
 import betterbundle.util.BundleContentsHelper;
 
 public final class BundlePanelRenderer {
 
-    public static final int SLOT_SIZE = 18;
-    public static final int COLUMNS = 6;
-    public static final int VISIBLE_ROWS = 8;
-    public static final int SLOT_SPACING = 1;
-    public static final int PADDING = 3;
-    public static final int SCROLL_BAR_WIDTH = 4;
-    public static final int CAT_BUTTON_SIZE = 23;
-    public static final int CAT_BAR_WIDTH = CAT_BUTTON_SIZE;
-    public static final int SEARCH_BAR_HEIGHT = 14;
+    public static final int SLOT_SIZE = BundlePanelLayout.SLOT_SIZE;
+    public static final int COLUMNS = BundlePanelLayout.COLUMNS;
+    private static final Identifier INVENTORY = Identifier.withDefaultNamespace("textures/gui/container/inventory.png");
 
     private static int scrollOffset = 0;
     public static boolean visible = true;
 
-    public static String searchQuery = "";
-    public static boolean searchFocused = false;
-    private static int searchCursorTick = 0;
     private static int hoveredBundleSlot = -1;
 
     public static BundleCategory currentCategory = BundleCategory.ALL;
@@ -48,73 +39,33 @@ public final class BundlePanelRenderer {
     /** bundleSlot = container slot index (for clickSlot packets) */
     public record BundleSlotEntry(int bundleSlot, ItemStack bundleStack, BundleContents contents) {}
 
-    public static int panelWidth() {
-        return CAT_BAR_WIDTH + 2 + SCROLL_BAR_WIDTH + 2
-                + COLUMNS * (SLOT_SIZE + SLOT_SPACING) - SLOT_SPACING + PADDING * 2;
+    public static BundlePanelLayout layout(int leftPos, int topPos, int imageHeight) {
+        return BundlePanelLayout.at(leftPos, topPos, imageHeight);
     }
 
     public static int getScrollOffset() { return scrollOffset; }
     public static void scrollToTop() { scrollOffset = 0; }
 
-    public static void scrollBy(int delta) {
-        List<BundleSlotEntry> bundles = getBundles();
-        if (bundles.isEmpty()) { scrollOffset = 0; return; }
-        List<FlatItem> items = buildFlatItemList(bundles);
-        int totalRows = (items.size() + COLUMNS - 1) / COLUMNS;
-        int maxScroll = Math.max(0, totalRows - VISIBLE_ROWS);
-        scrollOffset = Math.clamp(scrollOffset + delta, 0, maxScroll);
+    public static void scrollBy(int delta, int imageHeight) {
+        int count = filterItems(buildGroupedItemList(getBundles())).size();
+        int totalRows = (count + COLUMNS - 1) / COLUMNS;
+        int rows = layout(0, 0, imageHeight).rows();
+        scrollOffset = Math.clamp(scrollOffset + delta, 0, Math.max(0, totalRows - rows));
     }
 
-    public record FlatItem(int bundleSlot, int itemIndex, ItemStack stack) {}
-
-    public static List<FlatItem> buildFlatItemList(List<BundleSlotEntry> bundles) {
-        List<FlatItem> result = new ArrayList<>();
-        for (BundleSlotEntry entry : bundles) {
-            if (entry.contents() == null) continue;
-            List<ItemStack> items = entry.contents().itemCopyStream().toList();
-            for (int i = 0; i < items.size(); i++) {
-                result.add(new FlatItem(entry.bundleSlot(), i, items.get(i)));
-            }
+    public static List<BundleItemGroups.Group> buildGroupedItemList(List<BundleSlotEntry> bundles) {
+        List<BundleItemGroups.Source> sources = new ArrayList<>();
+        for (BundleSlotEntry bundle : bundles) {
+            if (bundle.contents() == null) continue;
+            List<ItemStack> items = bundle.contents().itemCopies().toList();
+            for (int i = 0; i < items.size(); i++) sources.add(new BundleItemGroups.Source(bundle.bundleSlot(), i, items.get(i)));
         }
-        return result;
+        return BundleItemGroups.combine(sources);
     }
 
-    public static List<FlatItem> filterItems(List<FlatItem> items, String query) {
-        List<FlatItem> filtered = new ArrayList<>();
-        for (FlatItem fi : items) {
-            String key = BuiltInRegistries.ITEM.getKey(fi.stack().getItem()).toString();
-            if (currentCategory.matches(key)) filtered.add(fi);
-        }
-        if (query.isEmpty()) return filtered;
-        String q = query.toLowerCase(Locale.ROOT);
-        List<FlatItem> sorted = new ArrayList<>(filtered);
-        sorted.sort(Comparator.comparing((FlatItem fi) -> matchesSearch(fi, q) ? 0 : 1));
-        return sorted;
-    }
-
-    private static boolean matchesSearch(FlatItem fi, String q) {
-        String name = fi.stack().getDisplayName().getString().toLowerCase(Locale.ROOT);
-        if (name.contains(q)) return true;
-        if (toPinyin(name).contains(q)) return true;
-        var key = BuiltInRegistries.ITEM.getKey(fi.stack().getItem());
-        String fullId = key.toString().toLowerCase(Locale.ROOT);
-        String path = key.getPath().toLowerCase(Locale.ROOT);
-        return fullId.contains(q) || path.contains(q);
-    }
-
-    private static String toPinyin(String text) {
-        try {
-            HanyuPinyinOutputFormat fmt = new HanyuPinyinOutputFormat();
-            fmt.setToneType(HanyuPinyinToneType.WITHOUT_TONE);
-            StringBuilder sb = new StringBuilder();
-            for (char c : text.toCharArray()) {
-                String[] arr = PinyinHelper.toHanyuPinyinStringArray(c, fmt);
-                if (arr != null && arr.length > 0) sb.append(arr[0]);
-            }
-            return sb.toString().toLowerCase(Locale.ROOT);
-        } catch (Throwable t) {
-            return "";
-        }
+    public static List<BundleItemGroups.Group> filterItems(List<BundleItemGroups.Group> items) {
+        return items.stream().filter(item -> currentCategory.matches(
+                BuiltInRegistries.ITEM.getKey(item.stack().getItem()).toString())).toList();
     }
 
     public static List<BundleSlotEntry> getBundles() { return findBundles(false); }
@@ -134,7 +85,7 @@ public final class BundlePanelRenderer {
             if (matches) {
                 // Convert inventory index to container slot index
                 int containerSlot = findContainerSlot(player, inv, i);
-                result.add(new BundleSlotEntry(containerSlot, stack, BundleContentsHelper.getContents(stack)));
+                if (containerSlot >= 0) result.add(new BundleSlotEntry(containerSlot, stack, BundleContentsHelper.getContents(stack)));
             }
         }
         return result;
@@ -147,225 +98,134 @@ public final class BundlePanelRenderer {
                 return slot.index;
             }
         }
-        return inventoryIndex; // fallback
+        return -1;
     }
 
     public static boolean isRecipeBookOpen() {
         Minecraft client = Minecraft.getInstance();
-        if (client.screen instanceof AbstractRecipeBookScreen<?> screen) return screen.recipeBookComponent.isVisible();
+        if (client.gui.screen() instanceof AbstractRecipeBookScreen<?> screen) return screen.recipeBookComponent.isVisible();
         return false;
     }
 
-    public static int getHoveredBundleSlot() { return visible ? hoveredBundleSlot : -1; }
+    public static int getHoveredBundleSlot() { return isEffectivelyVisible() ? hoveredBundleSlot : -1; }
     public static boolean isEffectivelyVisible() { return visible && !isRecipeBookOpen(); }
-    public static void toggleVisible() { visible = !visible; }
 
-    // --- category button layout ---
-
-    /** Shared button layout: returns Y position of category button i. */
-    private static int catButtonY(int i, int panelY) {
-        return panelY + PADDING - 3 + i * CAT_BAR_WIDTH;
+    public static void toggleVisible() {
+        visible = !visible;
+        hoveredBundleSlot = -1;
     }
 
     public static BundleCategory getCategoryAt(double mouseX, double mouseY, int leftPos, int topPos, int imageHeight) {
-        int pw = panelWidth();
-        int panelX = leftPos - pw - 4;
-        int baseCatX = panelX + PADDING - 10;
-        int panelY = topPos;
-        int searchH = SEARCH_BAR_HEIGHT + 3;
-        int gridH = PADDING * 2 + VISIBLE_ROWS * SLOT_SIZE + (VISIBLE_ROWS - 1) * SLOT_SPACING;
-        int panelHeight = Math.min(imageHeight, searchH + gridH) + 24;
-
-        BundleCategory[] cats = BundleCategory.values();
-        for (int i = 0; i < cats.length; i++) {
-            int by = catButtonY(i, panelY);
-            if (by + CAT_BAR_WIDTH > panelY + panelHeight) break;
-            int bx = baseCatX;
-            int bw = CAT_BAR_WIDTH;
-            if (cats[i] == currentCategory) { bx -= 5; bw += 5; }
-            if (mouseX >= bx && mouseX < bx + bw
-                    && mouseY >= by && mouseY < by + CAT_BAR_WIDTH) {
-                return cats[i];
-            }
+        BundlePanelLayout layout = layout(leftPos, topPos, imageHeight);
+        BundleCategory[] categories = BundleCategory.values();
+        for (int i = 0; i < categories.length; i++) {
+            if (layout.containsTab(i, mouseX, mouseY)) return categories[i];
         }
         return null;
     }
 
-    // --- search ---
-
-    public static boolean isInsideSearchBar(double mouseX, double mouseY, int leftPos, int topPos, int imageHeight) {
-        if (currentCategory != BundleCategory.ALL) return false; // Only ALL mode has interactive search
-        int pw = panelWidth();
-        int panelX = leftPos - pw - 4;
-        int sbx = panelX + PADDING + CAT_BAR_WIDTH + 2;
-        int sby = topPos + 2;
-        int sbw = pw - PADDING - CAT_BAR_WIDTH - 2 - PADDING - 10;
-        return mouseX >= sbx && mouseX <= sbx + sbw && mouseY >= sby && mouseY <= sby + SEARCH_BAR_HEIGHT;
-    }
-
-    public static void onCharTyped(char c) {
-        if (!searchFocused || currentCategory != BundleCategory.ALL) return;
-        if (c >= 32 && c != 127) { searchQuery += c; scrollOffset = 0; }
-    }
-
-    public static void onSearchKeyPress(int key) {
-        if (!searchFocused || currentCategory != BundleCategory.ALL) return;
-        if (key == 259) {
-            if (!searchQuery.isEmpty()) { searchQuery = searchQuery.substring(0, searchQuery.length() - 1); scrollOffset = 0; }
-        } else if (key == 256) {
-            searchQuery = ""; searchFocused = false; scrollOffset = 0;
-        } else if (key == 257 || key == 335) {
-            searchFocused = false;
-        }
-    }
-
-    // --- render ---
-
+    // Uses Minecraft's own assets so slots and controls follow resource packs.
     public static void render(GuiGraphicsExtractor graphics, int leftPos, int topPos, int imageHeight, int mouseX, int mouseY) {
+        hoveredBundleSlot = -1;
         if (!isEffectivelyVisible()) return;
         List<BundleSlotEntry> bundles = getBundles();
         if (bundles.isEmpty()) { scrollOffset = 0; return; }
-
-        List<FlatItem> allItems = buildFlatItemList(bundles);
-        if (allItems.isEmpty()) { scrollOffset = 0; return; }
-
-        List<FlatItem> items = filterItems(allItems, searchQuery);
-        if (items.isEmpty()) scrollOffset = 0;
-
-        int pw = panelWidth();
-        int panelX = leftPos - pw - 4;
-        int panelY = topPos;
-
-        boolean isAllMode = currentCategory == BundleCategory.ALL;
-        int searchH = SEARCH_BAR_HEIGHT + 3;
-
-        int gridH = PADDING * 2 + VISIBLE_ROWS * SLOT_SIZE + (VISIBLE_ROWS - 1) * SLOT_SPACING;
-        int panelHeight = Math.min(imageHeight, searchH + gridH) + 24;
-
-        // Panel background (left edge inset 16px)
-        graphics.fill(panelX + 16, panelY, panelX + pw, panelY + panelHeight, 0xC0101010);
-
+        List<BundleItemGroups.Group> items = filterItems(buildGroupedItemList(bundles));
+        BundlePanelLayout layout = layout(leftPos, topPos, imageHeight);
         Minecraft client = Minecraft.getInstance();
         Font font = client.font;
+        int totalRows = (items.size() + COLUMNS - 1) / COLUMNS;
+        int maxScroll = Math.max(0, totalRows - layout.rows());
+        scrollOffset = Math.clamp(scrollOffset, 0, maxScroll);
 
-        int totalRows = Math.max(1, (items.size() + COLUMNS - 1) / COLUMNS);
-        int maxScroll = Math.max(0, totalRows - VISIBLE_ROWS);
-        if (scrollOffset > maxScroll) scrollOffset = maxScroll;
-
-        // Category buttons always at panel top (no searchH offset)
-        int catTop = panelY;
-        // Grid starts below search bar
-        int gridTop = panelY + searchH;
-        int gridContentH = panelHeight - searchH;
-
-        // Category buttons
-        BundleCategory[] cats = BundleCategory.values();
-        int catX = panelX + PADDING - 10;
-        int catAreaH = panelHeight - PADDING * 2;
-
-        for (int i = 0; i < cats.length; i++) {
-            int by = catButtonY(i, catTop);
-            if (by + CAT_BAR_WIDTH > catTop + panelHeight) break;
-
-            boolean selected = cats[i] == currentCategory;
-            int bx = catX;
-            int bw = CAT_BAR_WIDTH;
-            if (selected) { bx -= 5; bw += 5; }
-            boolean hovered = mouseX >= bx && mouseX < bx + bw
-                    && mouseY >= by && mouseY < by + CAT_BAR_WIDTH;
-            int bg = selected ? 0xC0101010 : (hovered ? 0xFF555555 : 0xFF2D2D2D);
-            graphics.fill(bx, by, bx + bw, by + CAT_BAR_WIDTH, bg);
-            int iconOff = (CAT_BAR_WIDTH - 16) / 2;
-            graphics.item(cats[i].getIcon(), bx + iconOff, by + iconOff);
+        drawFrame(graphics, layout.bodyX(), layout.y(), BundlePanelLayout.BODY_WIDTH, layout.height());
+        BundleCategory[] categories = BundleCategory.values();
+        for (int i = 0; i < categories.length; i++) {
+            int tabY = layout.tabY(i);
+            boolean selected = categories[i] == currentCategory;
+            boolean hovered = layout.containsTab(i, mouseX, mouseY);
+            if (selected) {
+                drawFrame(graphics, layout.x(), tabY, BundlePanelLayout.TAB_WIDTH + 4, BundlePanelLayout.TAB_HEIGHT);
+                graphics.fill(layout.bodyX(), tabY + 4, layout.bodyX() + 4, tabY + 16, 0xFFC6C6C6);
+            } else {
+                sprite(graphics, hovered ? "widget/button_highlighted" : "widget/button",
+                        layout.x() + 2, tabY, BundlePanelLayout.TAB_WIDTH - 2, BundlePanelLayout.TAB_HEIGHT);
+            }
+            graphics.item(categories[i].getIcon(), layout.x() + 3, tabY + 2);
+            if (hovered) graphics.setTooltipForNextFrame(font, categories[i].getDisplayName(), mouseX, mouseY);
         }
 
-        // Scroll bar
-        int sbX = panelX + PADDING + CAT_BAR_WIDTH + 2;
-        int sbY = gridTop + PADDING;
-        int sbH = gridContentH - PADDING * 2;
+        graphics.enableScissor(layout.headerX(), layout.headerY(),
+                layout.headerX() + layout.headerWidth(), layout.headerY() + BundlePanelLayout.HEADER_HEIGHT);
+        graphics.text(font, currentCategory.getDisplayName(), layout.headerX(), layout.headerY() + 2, 0xFF404040, false);
+        graphics.disableScissor();
 
-        graphics.fill(sbX, sbY, sbX + SCROLL_BAR_WIDTH, sbY + sbH, 0xFF2D2D2D);
-        if (maxScroll > 0) {
-            int thumbH = Math.max(12, sbH * VISIBLE_ROWS / totalRows);
-            int thumbY = sbY + (sbH - thumbH) * scrollOffset / maxScroll;
-            graphics.fill(sbX, thumbY, sbX + SCROLL_BAR_WIDTH, thumbY + thumbH, 0xFF888888);
-        }
+        graphics.fill(layout.scrollX(), layout.gridY(), layout.scrollX() + BundlePanelLayout.SCROLL_WIDTH,
+                layout.gridY() + layout.gridHeight(), 0xFF8B8B8B);
+        int thumbY = layout.gridY() + (maxScroll == 0 ? 0 : (layout.gridHeight() - 15) * scrollOffset / maxScroll);
+        sprite(graphics, maxScroll > 0 ? "container/creative_inventory/scroller" : "container/creative_inventory/scroller_disabled",
+                layout.scrollX(), thumbY, BundlePanelLayout.SCROLL_WIDTH, 15);
 
-        // Item grid
-        int gridX = sbX + SCROLL_BAR_WIDTH + 2;
-        int gridY = gridTop + PADDING;
-        int startRow = scrollOffset;
-        int hoveredFlatIndex = -1;
-
-        for (int row = 0; row < VISIBLE_ROWS; row++) {
-            for (int col = 0; col < COLUMNS; col++) {
-                int flatIndex = (startRow + row) * COLUMNS + col;
-                if (flatIndex >= items.size()) break;
-                int sx = gridX + col * (SLOT_SIZE + SLOT_SPACING);
-                int sy = gridY + row * (SLOT_SIZE + SLOT_SPACING);
-
-                graphics.fill(sx, sy, sx + SLOT_SIZE, sy + SLOT_SIZE, 0xFF373737);
-                graphics.fill(sx + 1, sy + 1, sx + SLOT_SIZE - 1, sy + SLOT_SIZE - 1, 0xFFC6C6C6);
-
-                FlatItem fi = items.get(flatIndex);
-                graphics.item(fi.stack(), sx + 1, sy + 1);
-                graphics.itemDecorations(client.font, fi.stack(), sx + 1, sy + 1);
-
-                if (mouseX >= sx && mouseX < sx + SLOT_SIZE && mouseY >= sy && mouseY < sy + SLOT_SIZE) {
-                    hoveredFlatIndex = flatIndex;
-                }
+        int hoveredCell = layout.cellAt(mouseX, mouseY);
+        for (int cell = 0; cell < layout.rows() * COLUMNS; cell++) {
+            int x = layout.gridX() + cell % COLUMNS * SLOT_SIZE;
+            int y = layout.gridY() + cell / COLUMNS * SLOT_SIZE;
+            sprite(graphics, "container/slot", x, y, SLOT_SIZE, SLOT_SIZE);
+            int itemIndex = scrollOffset * COLUMNS + cell;
+            if (itemIndex >= items.size()) continue;
+            BundleItemGroups.Group item = items.get(itemIndex);
+            graphics.item(item.stack(), x + 1, y + 1);
+            graphics.itemDecorations(font, item.stack(), x + 1, y + 1, "");
+            if (item.totalCount() > 1) {
+                String count = Integer.toString(item.totalCount());
+                int width = font.width(count);
+                float scale = Math.min(1.0f, 16.0f / width);
+                var pose = graphics.pose();
+                pose.pushMatrix();
+                pose.translate(x + 17 - width * scale, y + 17 - (font.lineHeight - 2) * scale);
+                pose.scale(scale, scale);
+                graphics.text(font, count, 0, 0, 0xFFFFFFFF, true);
+                pose.popMatrix();
+            }
+            if (cell == hoveredCell) {
+                graphics.fill(x + 1, y + 1, x + SLOT_SIZE - 1, y + SLOT_SIZE - 1, 0x80FFFFFF);
+                List<Component> tooltip = new ArrayList<>(item.stack().getTooltipLines(Item.TooltipContext.of(client.level),
+                        client.player, client.options.advancedItemTooltips ? TooltipFlag.ADVANCED : TooltipFlag.NORMAL));
+                tooltip.add(Component.translatable("gui.better-bundle.group_total", item.totalCount(),
+                        item.sources().stream().map(BundleItemGroups.Source::bundleSlot).distinct().count()));
+                graphics.setTooltipForNextFrame(font, tooltip, item.stack().getTooltipImage(), mouseX, mouseY);
+                hoveredBundleSlot = item.sources().getFirst().bundleSlot();
             }
         }
 
-        if (hoveredFlatIndex >= 0) {
-            int hRow = hoveredFlatIndex / COLUMNS - startRow;
-            int hCol = hoveredFlatIndex % COLUMNS;
-            int hx = gridX + hCol * (SLOT_SIZE + SLOT_SPACING);
-            int hy = gridY + hRow * (SLOT_SIZE + SLOT_SPACING);
-            graphics.fill(hx, hy, hx + SLOT_SIZE, hy + SLOT_SIZE, 0x80FFFFFF);
-            graphics.setTooltipForNextFrame(client.font, items.get(hoveredFlatIndex).stack(), mouseX, mouseY);
-            hoveredBundleSlot = items.get(hoveredFlatIndex).bundleSlot();
-        } else {
-            hoveredBundleSlot = -1;
-        }
-
-        // Search bar (always visible, only interactive in ALL mode)
-        {
-            int sbx = panelX + PADDING + CAT_BAR_WIDTH + 2;
-            int sby = panelY + 2;
-            int sbw = pw - PADDING - CAT_BAR_WIDTH - 2 - PADDING - 10;
-            boolean active = isAllMode && searchFocused;
-            int bg = isAllMode ? (active ? 0xFF000000 : 0xFF2D2D2D) : 0xFF1A1A1A;
-            graphics.fill(sbx, sby, sbx + sbw, sby + SEARCH_BAR_HEIGHT, bg);
-            if (active) graphics.fill(sbx + 1, sby + 1, sbx + sbw - 1, sby + SEARCH_BAR_HEIGHT - 1, 0xFF3D3D3D);
-            int textY = sby + (SEARCH_BAR_HEIGHT - font.lineHeight) / 2;
-            if (isAllMode && searchQuery.isEmpty() && !searchFocused) {
-                graphics.text(font, "Search...", sbx + 3, textY, 0xFF666666, false);
-            } else if (isAllMode && !searchQuery.isEmpty()) {
-                graphics.text(font, searchQuery, sbx + 3, textY, 0xFFFFFFFF, false);
-                searchCursorTick = (searchCursorTick + 1) % 40;
-                if (searchFocused && searchCursorTick < 20) {
-                    int cursorX = sbx + 3 + font.width(searchQuery);
-                    graphics.fill(cursorX, textY, cursorX + 1, textY + font.lineHeight, 0xFFFFFFFF);
-                }
-            }
-        }
-
-        // Category title (on top of search bar)
-        if (currentCategory != BundleCategory.ALL) {
-            String label = currentCategory.getDisplayName();
-            graphics.text(font, label, panelX + 16 + 3, panelY + 2, 0xFFCCCCCC, false);
-        }
-
-        // Bundle count display (bottom-right of grid)
         int[] stats = getBundleStats();
         String countText = stats[0] + "/" + stats[1];
-        int textW = font.width(countText);
-        int countX = gridX + COLUMNS * (SLOT_SIZE + SLOT_SPACING) - SLOT_SPACING - textW;
-        int countY = gridY + VISIBLE_ROWS * SLOT_SIZE + (VISIBLE_ROWS - 1) * SLOT_SPACING + 7;
-        graphics.fill(countX - 2, countY, countX + textW + 2, countY + font.lineHeight, 0xC0101010);
-        graphics.text(font, countText, countX, countY, 0xFFAAAAAA, false);
+        graphics.text(font, countText, layout.bodyX() + BundlePanelLayout.BODY_WIDTH - 7 - font.width(countText),
+                layout.y() + layout.height() - 13, 0xFF404040, false);
+    }
 
+    public static void sprite(GuiGraphicsExtractor graphics, String path, int x, int y, int width, int height) {
+        graphics.blitSprite(RenderPipelines.GUI_TEXTURED, Identifier.withDefaultNamespace(path), x, y, width, height);
+    }
+
+    /** Stretch only the empty frame of the vanilla inventory; never its slots or player preview. */
+    public static void drawFrame(GuiGraphicsExtractor graphics, int x, int y, int width, int height) {
+        int[] sourceX = {0, 4, 172};
+        int[] sourceY = {0, 4, 162};
+        int[] sourceWidths = {4, 168, 4};
+        int[] sourceHeights = {4, 158, 4};
+        int[] targetX = {x, x + 4, x + width - 4};
+        int[] targetY = {y, y + 4, y + height - 4};
+        int[] widths = {4, width - 8, 4};
+        int[] heights = {4, height - 8, 4};
+        for (int row = 0; row < 3; row++) {
+            for (int col = 0; col < 3; col++) {
+                boolean center = row == 1 && col == 1;
+                graphics.blit(RenderPipelines.GUI_TEXTURED, INVENTORY, targetX[col], targetY[row],
+                        center ? 6 : sourceX[col], center ? 6 : sourceY[row], widths[col], heights[row],
+                        center ? 1 : sourceWidths[col], center ? 1 : sourceHeights[row], 256, 256);
+            }
+        }
     }
 
     private static int[] getBundleStats() {
@@ -375,7 +235,7 @@ public final class BundlePanelRenderer {
         for (BundleSlotEntry entry : all) {
             BundleContents c = entry.contents();
             if (c != null && !c.isEmpty()) {
-                totalItems += c.itemCopyStream().mapToInt(ItemStack::getCount).sum();
+                totalItems += c.itemCopies().mapToInt(ItemStack::getCount).sum();
                 totalWeight = totalWeight.add(c.weight().result().orElse(Fraction.ZERO));
             }
         }

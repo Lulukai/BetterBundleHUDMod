@@ -1,0 +1,15 @@
+{
+  "category.better-bundle.all": "All Items",
+  "category.better-bundle.blocks": "Building Blocks",
+  "category.better-bundle.decorations": "Decorations",
+  "category.better-bundle.plants": "Plants",
+  "category.better-bundle.food": "Food",
+  "category.better-bundle.tools": "Tools & Equipment",
+  "category.better-bundle.misc": "Miscellaneous",
+  "category.better-bundle.minerals": "Minerals",
+  "gui.better-bundle.show": "Show bundle contents",
+  "gui.better-bundle.hide": "Hide bundle contents",
+  "gui.better-bundle.recipe_book": "Close the recipe book to view bundle contents",
+  "gui.better-bundle.group_total": "%s items across %s bundle(s)",
+  "gui.better-bundle.no_staging_slot": "No free inventory slot available."
+}

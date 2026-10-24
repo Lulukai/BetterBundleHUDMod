@@ -1,20 +1,22 @@
 package betterbundle.gui;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 import java.util.Set;
+import java.util.HashSet;
 
 public enum BundleCategory {
-    ALL("全部", Items.COMPASS),
-    BLOCKS("方块", Items.GRASS_BLOCK),
-    NON_FULL_BLOCKS("不完整方块", Items.SPRUCE_DOOR),
-    PLANTS("植物", Items.CHERRY_SAPLING),
-    FOOD("食物", Items.BREAD),
-    TOOLS_AND_EQUIPMENT("工具和装备", Items.DIAMOND_CHESTPLATE),
-    MISC("杂物", Items.LEATHER),
-    MINERALS("矿物", Items.DIAMOND);
+    ALL("category.better-bundle.all", Items.COMPASS),
+    BLOCKS("category.better-bundle.blocks", Items.GRASS_BLOCK),
+    DECORATIONS("category.better-bundle.decorations", Items.SPRUCE_DOOR),
+    PLANTS("category.better-bundle.plants", Items.CHERRY_SAPLING),
+    FOOD("category.better-bundle.food", Items.BREAD),
+    TOOLS_AND_EQUIPMENT("category.better-bundle.tools", Items.DIAMOND_CHESTPLATE),
+    MISC("category.better-bundle.misc", Items.LEATHER),
+    MINERALS("category.better-bundle.minerals", Items.DIAMOND);
 
     private final String displayName;
     private final Item iconItem;
@@ -26,7 +28,7 @@ public enum BundleCategory {
         this.itemIds = Set.of();
     }
 
-    public String getDisplayName() { return displayName; }
+    public Component getDisplayName() { return Component.translatable(displayName); }
     public ItemStack getIcon() { return new ItemStack(iconItem); }
     public void setItemIds(Set<String> ids) { this.itemIds = Set.copyOf(ids); }
     public boolean matches(String registryKey) {
@@ -174,7 +176,7 @@ public enum BundleCategory {
             "minecraft:yellow_concrete_powder", "minecraft:yellow_glazed_terracotta",
             "minecraft:yellow_stained_glass", "minecraft:yellow_terracotta", "minecraft:yellow_wool"
         ));
-        NON_FULL_BLOCKS.setItemIds(Set.of(
+        DECORATIONS.setItemIds(Set.of(
             "minecraft:acacia_button", "minecraft:acacia_door", "minecraft:acacia_fence",
             "minecraft:acacia_fence_gate", "minecraft:acacia_hanging_sign", "minecraft:acacia_pressure_plate",
             "minecraft:acacia_sign", "minecraft:acacia_slab", "minecraft:acacia_stairs", "minecraft:acacia_trapdoor",
@@ -490,5 +492,11 @@ public enum BundleCategory {
             "minecraft:raw_copper", "minecraft:raw_gold", "minecraft:raw_iron",
             "minecraft:redstone_block"
         ));
+        CategoryAdditions.byCategory().forEach((categoryName, ids) -> {
+            BundleCategory category = BundleCategory.valueOf(categoryName);
+            Set<String> combined = new HashSet<>(category.itemIds);
+            combined.addAll(ids);
+            category.setItemIds(combined);
+        });
     }
 }

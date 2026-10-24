@@ -27,3 +27,7 @@ crash-reports/
 *.zip
 *.txt
 !LICENSE
+
+# Local build tools and dependency cache
+.tools/
+.gradle-user-home/

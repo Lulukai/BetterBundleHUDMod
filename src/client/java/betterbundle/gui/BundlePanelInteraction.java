@@ -10,7 +10,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.List;
 
@@ -18,47 +18,25 @@ import betterbundle.util.BundleContentsHelper;
 
 public final class BundlePanelInteraction {
 
-    private static final int GLFW_MOD_SHIFT = 0x1;
 
     private BundlePanelInteraction() {}
 
-    private static int gridX(int leftPos) {
-        int pw = BundlePanelRenderer.panelWidth();
-        int panelX = leftPos - pw - 4;
-        return panelX + BundlePanelRenderer.PADDING
-                + BundlePanelRenderer.CAT_BAR_WIDTH + 2
-                + BundlePanelRenderer.SCROLL_BAR_WIDTH + 2;
-    }
-
-    private static int gridY(int topPos) {
-        return topPos + BundlePanelRenderer.SEARCH_BAR_HEIGHT + 3 + BundlePanelRenderer.PADDING;
-    }
-
-    private static BundlePanelRenderer.FlatItem getClickedItem(double mouseX, double mouseY,
-                                                                int leftPos, int topPos) {
+    private static BundleItemGroups.Group getClickedItem(double mouseX, double mouseY,
+                                                                int leftPos, int topPos, int imageHeight) {
         List<BundlePanelRenderer.BundleSlotEntry> bundles = BundlePanelRenderer.getBundles();
         if (bundles.isEmpty()) return null;
 
-        List<BundlePanelRenderer.FlatItem> allItems = BundlePanelRenderer.buildFlatItemList(bundles);
+        List<BundleItemGroups.Group> allItems = BundlePanelRenderer.buildGroupedItemList(bundles);
         if (allItems.isEmpty()) return null;
 
         // Use filtered items to match rendered panel
-        List<BundlePanelRenderer.FlatItem> items = BundlePanelRenderer.filterItems(allItems, BundlePanelRenderer.searchQuery);
+        List<BundleItemGroups.Group> items = BundlePanelRenderer.filterItems(allItems);
         if (items.isEmpty()) return null;
 
-        int gx = gridX(leftPos);
-        int gy = gridY(topPos);
-
-        int relX = (int) mouseX - gx;
-        int relY = (int) mouseY - gy;
-
-        int col = relX / (BundlePanelRenderer.SLOT_SIZE + BundlePanelRenderer.SLOT_SPACING);
-        int row = relY / (BundlePanelRenderer.SLOT_SIZE + BundlePanelRenderer.SLOT_SPACING);
-
-        if (col < 0 || col >= BundlePanelRenderer.COLUMNS) return null;
-        if (row < 0 || row >= BundlePanelRenderer.VISIBLE_ROWS) return null;
-
-        int flatIndex = (BundlePanelRenderer.getScrollOffset() + row) * BundlePanelRenderer.COLUMNS + col;
+        BundlePanelLayout layout = BundlePanelRenderer.layout(leftPos, topPos, imageHeight);
+        int cell = layout.cellAt(mouseX, mouseY);
+        if (cell < 0) return null;
+        int flatIndex = BundlePanelRenderer.getScrollOffset() * BundlePanelRenderer.COLUMNS + cell;
         if (flatIndex >= items.size()) return null;
         return items.get(flatIndex);
     }
@@ -66,53 +44,9 @@ public final class BundlePanelInteraction {
     public static boolean handlePanelClick(double mouseX, double mouseY, int button, int modifiers,
                                             int leftPos, int topPos,
                                             net.minecraft.client.gui.screens.inventory.AbstractContainerScreen<?> screen) {
-        BundlePanelRenderer.FlatItem clicked = getClickedItem(mouseX, mouseY, leftPos, topPos);
+        BundleItemGroups.Group clicked = getClickedItem(mouseX, mouseY, leftPos, topPos, screen.imageHeight);
         if (clicked == null) return false;
-
-        Minecraft client = Minecraft.getInstance();
-        Player player = client.player;
-        if (player == null) return false;
-
-        ClientPacketListener connection = client.getConnection();
-        if (connection == null) return false;
-
-        int bundleSlot = clicked.bundleSlot();
-        int containerId = player.containerMenu.containerId;
-        boolean shiftDown = (modifiers & GLFW_MOD_SHIFT) != 0;
-
-        if (shiftDown) {
-            boolean inContainer = !(screen instanceof net.minecraft.client.gui.screens.inventory.InventoryScreen);
-            int emptySlot;
-            if (button == 0 && inContainer) {
-                emptySlot = findEmptyContainerSlot(player) >= 0
-                        ? findEmptyContainerSlot(player) : findEmptyPlayerSlot(player);
-            } else {
-                emptySlot = findEmptyPlayerSlot(player);
-            }
-            if (emptySlot < 0) return true;
-
-            int count = clicked.stack().getCount();
-            for (int i = 0; i < count; i++) {
-                connection.send(new ServerboundSelectBundleItemPacket(bundleSlot, clicked.itemIndex()));
-                connection.send(makeClickPacket(containerId, bundleSlot, (byte) 1));
-            }
-            connection.send(makeClickPacket(containerId, emptySlot, (byte) 0));
-        } else {
-            connection.send(new ServerboundSelectBundleItemPacket(bundleSlot, clicked.itemIndex()));
-            connection.send(makeClickPacket(containerId, bundleSlot, (byte) 1));
-        }
-
-        return true;
-    }
-
-    /** Find an empty slot in the open container (not the player inventory). */
-    private static int findEmptyContainerSlot(Player player) {
-        for (net.minecraft.world.inventory.Slot slot : player.containerMenu.slots) {
-            if (!slot.hasItem() && slot.container != player.getInventory()) {
-                return slot.index;
-            }
-        }
-        return -1;
+        return BundleWithdrawal.start(clicked, button, (modifiers & InputConstants.MOD_SHIFT) != 0, screen);
     }
 
     public static boolean handleSpaceClick(Slot hoveredSlot) {
@@ -121,8 +55,7 @@ public final class BundlePanelInteraction {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null || client.getWindow() == null) return false;
 
-        long window = client.getWindow().handle();
-        if (GLFW.glfwGetKey(window, GLFW.GLFW_KEY_SPACE) != GLFW.GLFW_PRESS) return false;
+        if (!InputConstants.isKeyDown(InputConstants.KEY_SPACE)) return false;
 
         Player player = client.player;
         ItemStack stack = hoveredSlot.getItem();
@@ -154,21 +87,6 @@ public final class BundlePanelInteraction {
         return new ServerboundContainerClickPacket(
                 containerId, -1, (short) slot, button,
                 ContainerInput.PICKUP, new Int2ObjectOpenHashMap<>(), HashedStack.EMPTY);
-    }
-
-    private static int findEmptyPlayerSlot(Player player) {
-        // search main inventory (getSlotIndex 9-35) then hotbar (getSlotIndex 0-8)
-        for (int pass = 0; pass < 2; pass++) {
-            int min = (pass == 0) ? 9 : 0;
-            int max = (pass == 0) ? 36 : 9;
-            for (Slot slot : player.containerMenu.slots) {
-                if (slot.container == player.getInventory() && !slot.hasItem()) {
-                    int idx = slot.getContainerSlot();
-                    if (idx >= min && idx < max) return slot.index;
-                }
-            }
-        }
-        return -1;
     }
 
     private static long bulkInsertStart = 0;
@@ -220,20 +138,12 @@ public final class BundlePanelInteraction {
                                         int leftPos, int topPos, int imageHeight) {
         if (!BundlePanelRenderer.isEffectivelyVisible()) return false;
         if (!isInsidePanel(mouseX, mouseY, leftPos, topPos, imageHeight)) return false;
-        BundlePanelRenderer.scrollBy(scrollDelta > 0 ? -1 : 1);
+        BundlePanelRenderer.scrollBy(scrollDelta > 0 ? -1 : 1, imageHeight);
         return true;
     }
 
     public static boolean isInsidePanel(double mouseX, double mouseY,
                                          int leftPos, int topPos, int imageHeight) {
-        int pw = BundlePanelRenderer.panelWidth();
-        int panelX = leftPos - pw - 4;
-        int gx = gridX(leftPos);
-        if (mouseX < gx || mouseX > panelX + pw - BundlePanelRenderer.PADDING) return false;
-        int pTop = gridY(topPos);
-        int pH = BundlePanelRenderer.VISIBLE_ROWS * BundlePanelRenderer.SLOT_SIZE
-                + (BundlePanelRenderer.VISIBLE_ROWS - 1) * BundlePanelRenderer.SLOT_SPACING;
-        if (mouseY < pTop || mouseY > pTop + pH) return false;
-        return true;
+        return BundlePanelRenderer.layout(leftPos, topPos, imageHeight).containsGrid(mouseX, mouseY);
     }
 }

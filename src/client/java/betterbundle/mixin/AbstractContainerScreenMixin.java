@@ -1,16 +1,16 @@
 package betterbundle.mixin;
 
 import betterbundle.gui.BundleCategory;
+import betterbundle.gui.BundleWithdrawal;
 import betterbundle.gui.BundlePanelInteraction;
 import betterbundle.gui.BundlePanelRenderer;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractRecipeBookScreen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -21,6 +21,7 @@ public abstract class AbstractContainerScreenMixin {
 
     @Inject(method = "mouseClicked", at = @At("HEAD"), cancellable = true)
     private void onMouseClicked(MouseButtonEvent event, boolean doubleClick, CallbackInfoReturnable<Boolean> cir) {
+        if (BundleWithdrawal.busy()) { cir.setReturnValue(true); return; }
         AbstractContainerScreen<?> self = (AbstractContainerScreen<?>) (Object) this;
 
         // Bulk-insert: space+left anywhere starts the timer (0.05s to activate)
@@ -38,7 +39,7 @@ public abstract class AbstractContainerScreenMixin {
         double mx = event.x();
         double my = event.y();
 
-        // For non-recipe-book screens: handle toggle, category, search bar
+        // For non-recipe-book screens: handle toggle and category buttons
         if (!(((Object) this) instanceof AbstractRecipeBookScreen)) {
             int bx = self.leftPos + self.imageWidth;
             int by = self.topPos + 5;
@@ -52,21 +53,12 @@ public abstract class AbstractContainerScreenMixin {
                 BundleCategory cat = BundlePanelRenderer.getCategoryAt(mx, my, self.leftPos, self.topPos, self.imageHeight);
                 if (cat != null) {
                     BundlePanelRenderer.currentCategory = cat;
-                    BundlePanelRenderer.searchQuery = "";
                     BundlePanelRenderer.scrollToTop();
                     cir.setReturnValue(true);
                     return;
                 }
             }
 
-            if (BundlePanelRenderer.isEffectivelyVisible()
-                    && BundlePanelRenderer.isInsideSearchBar(mx, my, self.leftPos, self.topPos, self.imageHeight)) {
-                BundlePanelRenderer.searchFocused = true;
-                cir.setReturnValue(true);
-                return;
-            }
-
-            BundlePanelRenderer.searchFocused = false;
         }
 
         if (!BundlePanelRenderer.isEffectivelyVisible()) return;
@@ -91,15 +83,7 @@ public abstract class AbstractContainerScreenMixin {
     }
 
     private static boolean isInsidePanelBounds(double mx, double my, int leftPos, int topPos, int imageHeight) {
-        int pw = BundlePanelRenderer.panelWidth();
-        int panelX = leftPos - pw - 4;
-        int panelY = topPos;
-        int searchH = BundlePanelRenderer.SEARCH_BAR_HEIGHT + 3;
-        int gridH = BundlePanelRenderer.PADDING * 2
-                + BundlePanelRenderer.VISIBLE_ROWS * BundlePanelRenderer.SLOT_SIZE
-                + (BundlePanelRenderer.VISIBLE_ROWS - 1) * BundlePanelRenderer.SLOT_SPACING;
-        int panelH = Math.min(imageHeight, searchH + gridH) + 24;
-        return mx >= panelX && mx <= panelX + pw && my >= panelY && my <= panelY + panelH;
+        return BundlePanelRenderer.layout(leftPos, topPos, imageHeight).contains(mx, my);
     }
 
     @Inject(method = "mouseReleased", at = @At("HEAD"), cancellable = true)
@@ -116,10 +100,7 @@ public abstract class AbstractContainerScreenMixin {
 
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private void onKeyPressed(KeyEvent event, CallbackInfoReturnable<Boolean> cir) {
-        if (BundlePanelRenderer.searchFocused) {
-            BundlePanelRenderer.onSearchKeyPress(event.key());
-            cir.setReturnValue(true);
-        }
+        if (BundleWithdrawal.busy() && !event.isEscape()) cir.setReturnValue(true);
     }
 
     private int lastBulkSlot = -1;
@@ -127,6 +108,7 @@ public abstract class AbstractContainerScreenMixin {
     @Inject(method = "mouseDragged", at = @At("HEAD"), cancellable = true)
     private void onMouseDragged(MouseButtonEvent event, double dx, double dy,
                                  CallbackInfoReturnable<Boolean> cir) {
+        if (BundleWithdrawal.busy()) { cir.setReturnValue(true); return; }
         if (!BundlePanelInteraction.isBulkInsertActive()) return;
         if (!isSpaceDown()) { BundlePanelInteraction.stopBulkInsert(); return; }
 
@@ -153,7 +135,6 @@ public abstract class AbstractContainerScreenMixin {
     }
 
     private static boolean isSpaceDown() {
-        long window = Minecraft.getInstance().getWindow().handle();
-        return GLFW.glfwGetKey(window, GLFW.GLFW_KEY_SPACE) == GLFW.GLFW_PRESS;
+        return InputConstants.isKeyDown(InputConstants.KEY_SPACE);
     }
 }
